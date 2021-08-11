@@ -1,29 +1,43 @@
-function Test-Ping{
+function Test-Ping {
     param (
         $server,
-        $count
+        $seconds
     )
-    $test = Test-Connection -ComputerName $server -Count $count
+
+    $time = Get-Date
+
+    $ping = [System.Collections.ArrayList]@()
 
     $jitterArray = [System.Collections.ArrayList]@()
 
-    For ($i = 0; $i -le $test.count; $i++) {
-        $jitter = $test.ResponseTime[$i] - $test.ResponseTime[$i - 1]
+    $errors = 0
+
+    while ((NEW-TIMESPAN –Start $time –End (Get-Date)).seconds -lt $seconds) {
+        try {
+            $ping += (Test-Connection -ComputerName $server -count 1 -ErrorAction Stop).ResponseTime
+        }
+        catch {
+            $errors += 1
+        }
+    }
+
+    For ($i = 1; $i -le $ping.count; $i++) {
+        $jitter = $ping[$i] - $ping[$i - 1]
         $jitterArray += [System.Math]::Abs($jitter)
     }
 
-    $stats = $test | Measure-Object ResponseTime -Average -Maximum -Minimum
+    $stats = $ping | Measure-Object -Average -Maximum -Minimum
 
     $jitterStats = $jitterArray | Measure-Object -Average
 
     $results = [ordered]@{}
 
-    $results["Count"] = $test.count
-    $results["Packet Loss"] = (($test.count - $count) / $count) * 100
+    $results["Count"] = $ping.count + $errors
+    $results["Packet Loss"] = (1 - ($ping.count / ($ping.count + $errors))) * 100
     $results["Ping Average"] = $stats.Average
     $results["Ping Min"] = $stats.Minimum
     $results["Ping Max"] = $stats.Maximum
     $results["Ping Jitter"] = $jitterStats.Average
 
     return $results
-    }
+}
